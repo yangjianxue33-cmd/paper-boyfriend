@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@14 *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://localhost:3000/chat/ceo)",
+      "Bash(curl -s -X POST http://localhost:3000/api/chat -H \"Content-Type: application/json\" -d '{\"characterId\":\"ceo\",\"userMessage\":\"你好\",\"history\":[]}')"
+    ]
+  }
+}

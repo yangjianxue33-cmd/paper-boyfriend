@@ -1,0 +1,153 @@
+// prisma/schema.prisma
+// 纸片人男友 - 数据库模型定义
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 用户表 - 存储用户基础信息和认证信息
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone        String    @unique @map("phone") @db.VarChar(20)
+  nickname     String?   @map("nickname") @db.VarChar(50)
+  avatar       String?   @map("avatar") @db.VarChar(500)
+  authType     String    @default("phone") @map("auth_type") @db.VarChar(20)
+  wechatOpenid String?   @unique @map("wechat_openid") @db.VarChar(100)
+  status       String    @default("active") @db.VarChar(20)
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // 关联
+  profile              UserProfile?
+  sessions             ChatSession[]
+  invitationsSent      Invitation[] @relation("Inviter")
+  invitationsReceived  Invitation[] @relation("Invitee")
+  favorites            UserFavorite[]
+
+  @@index([phone])
+  @@index([wechatOpenid])
+  @@map("users")
+}
+
+/// 用户画像表 - 存储用户个性化信息，用于AI生成针对性回复
+model UserProfile {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @unique @map("user_id") @db.Uuid
+  personality      String?  @map("personality") @db.VarChar(50)
+  ageRange         String?  @map("age_range") @db.VarChar(20)
+  hobbies          Json     @default("[]")
+  emotionalPattern String?  @map("emotional_pattern") @db.VarChar(50)
+  workExperience   String?  @map("work_experience") @db.VarChar(50)
+  preferences      Json     @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_profiles")
+}
+
+/// 角色表 - 存储虚拟男友角色配置
+model Character {
+  id           String   @id @db.VarChar(50)
+  name         String   @db.VarChar(50)
+  type         String   @db.VarChar(50)
+  avatar       String?  @db.VarChar(500)
+  occupation   String?  @db.VarChar(50)
+  personality  Json     @default("[]")
+  backstory    String?
+  mbti         String?  @db.VarChar(10)
+  weaknesses   String?
+  systemPrompt String   @map("system_prompt")
+  voiceId      String?  @map("voice_id") @db.VarChar(100)
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sessions ChatSession[]
+
+  @@index([isActive, sortOrder])
+  @@map("characters")
+}
+
+/// 聊天会话表 - 存储用户与每个角色的聊天会话
+model ChatSession {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  characterId   String    @map("character_id") @db.VarChar(50)
+  title         String?   @db.VarChar(100)
+  lastMessageAt DateTime? @map("last_message_at")
+  messageCount  Int       @default(0) @map("message_count")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id])
+  messages Message[]
+  favorites UserFavorite[]
+
+  @@index([userId, lastMessageAt])
+  @@index([characterId])
+  @@index([userId, characterId])
+  @@map("chat_sessions")
+}
+
+/// 消息表 - 存储聊天消息内容
+model Message {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId   String   @map("session_id") @db.Uuid
+  role        String   @db.VarChar(20)
+  content     String   @db.Text
+  contentType String   @default("text") @map("content_type") @db.VarChar(20)
+  audioUrl    String?  @map("audio_url") @db.VarChar(500)
+  imageUrl    String?  @map("image_url") @db.VarChar(500)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("messages")
+}
+
+/// 邀请关系表 - 存储用户邀请关系
+model Invitation {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inviterId    String    @map("inviter_id") @db.Uuid
+  inviteeId    String?   @map("invitee_id") @db.Uuid
+  inviteCode   String    @unique @map("invite_code") @db.VarChar(100)
+  status       String    @default("pending") @db.VarChar(20)
+  invitedAt    DateTime  @default(now()) @map("invited_at")
+  registeredAt DateTime? @map("registered_at")
+
+  inviter User  @relation("Inviter", fields: [inviterId], references: [id])
+  invitee User? @relation("Invitee", fields: [inviteeId], references: [id])
+
+  @@index([inviteCode])
+  @@index([inviterId])
+  @@map("invitations")
+}
+
+/// 用户收藏表 - 存储用户收藏的聊天片段
+model UserFavorite {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  sessionId  String   @map("session_id") @db.Uuid
+  messageIds Json     @default("[]") @map("message_ids")
+  title      String?  @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_favorites")
+}
